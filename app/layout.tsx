@@ -1,9 +1,23 @@
 import type { Metadata, Viewport } from "next";
+import { content } from "./content";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Simon's Millionaire — 30th Birthday Edition",
-  description: "Simon takes the hot seat in a birthday edition of Millionaire.",
+  title: `${content.title} — ${content.subtitle}`,
+  description: content.description,
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+      "max-video-preview": 0,
+      "max-image-preview": "none",
+      "max-snippet": 0,
+    },
+  },
 };
 
 export const viewport: Viewport = {
@@ -19,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang={content.language}>
       <body>{children}</body>
     </html>
   );

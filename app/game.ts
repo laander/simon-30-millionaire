@@ -1,8 +1,16 @@
+import { content } from "./content.ts";
+
 export type AnswerIndex = 0 | 1 | 2 | 3;
+
+export type AnswerLetter = (typeof ANSWER_LETTERS)[number];
+
+export type QuestionAudioCue = "questionLow" | "questionMid" | "questionHigh";
 
 export type AudioCue =
   | "intro"
-  | "question"
+  | "letsPlay"
+  | "lifeline"
+  | QuestionAudioCue
   | "lockIn"
   | "correct"
   | "wrong"
@@ -11,27 +19,75 @@ export type AudioCue =
 export type AudioConfig = Partial<Record<AudioCue, string>>;
 
 export interface Question {
-  id: string;
   amount: string;
   prompt: string;
   answers: readonly [string, string, string, string];
-  correctIndex: AnswerIndex;
+  correct: AnswerLetter;
+  milestone?: boolean;
+}
+
+export interface GameText {
+  startShow: string;
+  introLabel: string;
+  introContinue: string;
+  gameLabel: string;
+  soundOn: string;
+  soundOff: string;
+  turnSoundOn: string;
+  turnSoundOff: string;
+  restart: string;
+  restartLabel: string;
+  lifelines: string;
+  fiftyFifty: string;
+  askAudience: string;
+  phoneFriend: string;
+  useLifeline: (name: string) => string;
+  lifelineUsed: (name: string) => string;
+  lifelineUsedLabel: (name: string) => string;
+  ladder: string;
+  ladderLabel: string;
+  jumpToQuestion: (number: number, amount: string) => string;
+  questionProgress: (number: number, total: number) => string;
+  questionProgressLabel: (number: number, total: number, amount: string) => string;
+  answersLabel: string;
+  answerSelected: string;
+  answerCorrect: string;
+  answerIncorrect: string;
+  answerEliminated: (letter: AnswerLetter) => string;
+  continue: string;
+  playAgain: string;
+  restartDialogEyebrow: string;
+  restartDialogTitle: string;
+  restartDialogBody: string;
+  restartDialogCancel: string;
+  restartDialogConfirm: string;
+  announceSelected: (letter: AnswerLetter) => string;
+  announceCorrect: string;
+  announceIncorrect: string;
+  announceWinner: string;
 }
 
 export interface GameConfig {
+  language: string;
   title: string;
-  contestant: string;
   subtitle: string;
-  logoSrc: string;
+  description: string;
+  logo: string;
   questions: readonly Question[];
+  celebration: {
+    kicker: string;
+    headline: string;
+    message: string;
+  };
   audio: AudioConfig;
+  text: GameText;
 }
 
 export type GamePhase =
   | "ready"
   | "intro"
   | "question"
-  | "locked"
+  | "selected"
   | "revealed"
   | "transition"
   | "celebration";
@@ -42,13 +98,21 @@ export interface GameState {
   selectedIndex: AnswerIndex | null;
   correct: boolean | null;
   soundOn: boolean;
+  audienceUsed: boolean;
+  fiftyFiftyUsed: boolean;
+  phoneUsed: boolean;
+  eliminatedIndexes: AnswerIndex[];
+  incorrectIndexes: AnswerIndex[];
 }
 
 export type GameAction =
   | { type: "START" }
   | { type: "INTRO_DONE" }
   | { type: "SELECT_ANSWER"; index: AnswerIndex }
-  | { type: "REVEAL"; isCorrect: boolean }
+  | { type: "USE_AUDIENCE" }
+  | { type: "USE_FIFTY_FIFTY" }
+  | { type: "USE_PHONE" }
+  | { type: "JUMP_TO_QUESTION"; index: number }
   | { type: "ADVANCE" }
   | { type: "NEXT_QUESTION" }
   | { type: "TOGGLE_SOUND" }
@@ -56,124 +120,29 @@ export type GameAction =
 
 export const ANSWER_LETTERS = ["A", "B", "C", "D"] as const;
 
-const questions: readonly Question[] = [
-  {
-    id: "q-100",
-    amount: "$100",
-    prompt: "Which color do you mix with yellow to make green?",
-    answers: ["Red", "Blue", "Purple", "Orange"],
-    correctIndex: 1,
-  },
-  {
-    id: "q-200",
-    amount: "$200",
-    prompt: "How many days are there in a leap year?",
-    answers: ["364", "365", "366", "367"],
-    correctIndex: 2,
-  },
-  {
-    id: "q-300",
-    amount: "$300",
-    prompt: "Which planet is commonly known as the Red Planet?",
-    answers: ["Venus", "Mars", "Jupiter", "Mercury"],
-    correctIndex: 1,
-  },
-  {
-    id: "q-500",
-    amount: "$500",
-    prompt: "What is the capital city of Japan?",
-    answers: ["Kyoto", "Seoul", "Osaka", "Tokyo"],
-    correctIndex: 3,
-  },
-  {
-    id: "q-1000",
-    amount: "$1,000",
-    prompt: "A standard modern piano usually has how many keys?",
-    answers: ["66", "72", "88", "96"],
-    correctIndex: 2,
-  },
-  {
-    id: "q-2000",
-    amount: "$2,000",
-    prompt: "What is the smallest prime number?",
-    answers: ["0", "1", "2", "3"],
-    correctIndex: 2,
-  },
-  {
-    id: "q-4000",
-    amount: "$4,000",
-    prompt: "Who painted the Mona Lisa?",
-    answers: ["Michelangelo", "Raphael", "Leonardo da Vinci", "Caravaggio"],
-    correctIndex: 2,
-  },
-  {
-    id: "q-8000",
-    amount: "$8,000",
-    prompt: "What is the chemical symbol for gold?",
-    answers: ["Ag", "Au", "Gd", "Go"],
-    correctIndex: 1,
-  },
-  {
-    id: "q-16000",
-    amount: "$16,000",
-    prompt: "Which novel begins with the words “Call me Ishmael”?",
-    answers: ["Moby-Dick", "The Odyssey", "Treasure Island", "The Old Man and the Sea"],
-    correctIndex: 0,
-  },
-  {
-    id: "q-32000",
-    amount: "$32,000",
-    prompt: "Which is the largest ocean on Earth?",
-    answers: ["Atlantic", "Indian", "Arctic", "Pacific"],
-    correctIndex: 3,
-  },
-  {
-    id: "q-64000",
-    amount: "$64,000",
-    prompt: "In which year did the Berlin Wall fall?",
-    answers: ["1987", "1988", "1989", "1991"],
-    correctIndex: 2,
-  },
-  {
-    id: "q-125000",
-    amount: "$125,000",
-    prompt: "Which language has the greatest number of native speakers worldwide?",
-    answers: ["English", "Hindi", "Spanish", "Mandarin Chinese"],
-    correctIndex: 3,
-  },
-  {
-    id: "q-250000",
-    amount: "$250,000",
-    prompt: "Titan, the only moon with a dense atmosphere, orbits which planet?",
-    answers: ["Jupiter", "Saturn", "Uranus", "Neptune"],
-    correctIndex: 1,
-  },
-  {
-    id: "q-500000",
-    amount: "$500,000",
-    prompt: "The waltz “The Blue Danube” was composed by whom?",
-    answers: ["Johann Strauss II", "Franz Schubert", "Gustav Mahler", "Anton Bruckner"],
-    correctIndex: 0,
-  },
-  {
-    id: "q-1000000",
-    amount: "$1,000,000",
-    prompt: "Which letter does not appear in the name of any U.S. state?",
-    answers: ["J", "Q", "X", "Z"],
-    correctIndex: 1,
-  },
-];
+export type GameAudioMode = "silent" | "intro" | "question" | "lockIn" | "correct" | "wrong" | "victory";
 
-export const gameConfig: GameConfig = {
-  title: "Simon's Millionaire",
-  contestant: "Simon",
-  subtitle: "30th Birthday Edition",
-  logoSrc: "/simon-millionaire-logo.jpeg",
-  questions,
-  // Add optional licensed files here, e.g. intro: "/audio/intro.mp3".
-  // Every missing or failed file automatically uses the built-in sound engine.
-  audio: {},
-};
+export function gameAudioModeFor(state: Pick<GameState, "phase" | "correct">): GameAudioMode {
+  if (state.phase === "intro") return "intro";
+  if (state.phase === "question") return "question";
+  if (state.phase === "selected") return "lockIn";
+  if (state.phase === "revealed") return state.correct ? "correct" : "wrong";
+  if (state.phase === "celebration") return "victory";
+  return "silent";
+}
+
+// Splits the ladder into roughly 30% low, 30% mid, and 40% high-stakes music.
+export function questionAudioCueFor(questionIndex: number, questionCount: number): QuestionAudioCue {
+  if (questionIndex < Math.round(questionCount * 0.3)) return "questionLow";
+  if (questionIndex < Math.round(questionCount * 0.6)) return "questionMid";
+  return "questionHigh";
+}
+
+export function correctIndexOf(question: Question): AnswerIndex {
+  return ANSWER_LETTERS.indexOf(question.correct) as AnswerIndex;
+}
+
+export const gameConfig: GameConfig = content;
 
 export const initialGameState: GameState = {
   phase: "ready",
@@ -181,6 +150,11 @@ export const initialGameState: GameState = {
   selectedIndex: null,
   correct: null,
   soundOn: true,
+  audienceUsed: false,
+  fiftyFiftyUsed: false,
+  phoneUsed: false,
+  eliminatedIndexes: [],
+  incorrectIndexes: [],
 };
 
 export interface GameTimerScheduler {
@@ -217,23 +191,66 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return state.phase === "ready" ? { ...state, phase: "intro" } : state;
     case "INTRO_DONE":
       return state.phase === "intro"
-        ? { ...state, phase: "question", selectedIndex: null, correct: null }
+        ? { ...state, phase: "question", selectedIndex: null, correct: null, incorrectIndexes: [] }
         : state;
     case "SELECT_ANSWER":
-      return state.phase === "question"
-        ? { ...state, phase: "locked", selectedIndex: action.index, correct: null }
+      if (state.eliminatedIndexes.includes(action.index) || state.incorrectIndexes.includes(action.index)) {
+        return state;
+      }
+      if (state.phase === "question" || (state.phase === "revealed" && state.correct === false)) {
+        return { ...state, phase: "selected", selectedIndex: action.index, correct: null };
+      }
+      if (state.phase === "selected") {
+        if (state.selectedIndex !== action.index) return { ...state, selectedIndex: action.index };
+        const question = gameConfig.questions[state.questionIndex];
+        const isCorrect = action.index === correctIndexOf(question);
+        return {
+          ...state,
+          phase: "revealed",
+          correct: isCorrect,
+          incorrectIndexes: isCorrect
+            ? state.incorrectIndexes
+            : [...state.incorrectIndexes, action.index],
+        };
+      }
+      return state;
+    case "USE_AUDIENCE":
+      return !state.audienceUsed && (state.phase === "question" || state.phase === "selected")
+        ? { ...state, audienceUsed: true }
         : state;
-    case "REVEAL":
-      return state.phase === "locked"
-        ? { ...state, phase: "revealed", correct: action.isCorrect }
+    case "USE_FIFTY_FIFTY": {
+      if (state.fiftyFiftyUsed || (state.phase !== "question" && state.phase !== "selected")) return state;
+      const question = gameConfig.questions[state.questionIndex];
+      const answerIndexes: AnswerIndex[] = [0, 1, 2, 3];
+      const eliminatedIndexes = answerIndexes
+        .filter((index) =>
+          index !== correctIndexOf(question)
+          && index !== state.selectedIndex
+          && !state.incorrectIndexes.includes(index)
+        )
+        .slice(0, 2);
+      return { ...state, fiftyFiftyUsed: true, eliminatedIndexes };
+    }
+    case "USE_PHONE":
+      return !state.phoneUsed && (state.phase === "question" || state.phase === "selected")
+        ? { ...state, phoneUsed: true }
+        : state;
+    case "JUMP_TO_QUESTION":
+      return Number.isInteger(action.index) && action.index >= 0 && action.index < gameConfig.questions.length
+        ? {
+            ...state,
+            phase: "question",
+            questionIndex: action.index,
+            selectedIndex: null,
+            correct: null,
+            eliminatedIndexes: [],
+            incorrectIndexes: [],
+          }
         : state;
     case "ADVANCE": {
-      if (state.phase !== "revealed") return state;
+      if (state.phase !== "revealed" || state.correct !== true) return state;
       const isFinal = state.questionIndex === gameConfig.questions.length - 1;
-      if (isFinal && state.correct) return { ...state, phase: "celebration" };
-      if (isFinal) {
-        return { ...state, phase: "question", selectedIndex: null, correct: null };
-      }
+      if (isFinal) return { ...state, phase: "celebration" };
       return { ...state, phase: "transition" };
     }
     case "NEXT_QUESTION":
@@ -244,6 +261,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             questionIndex: state.questionIndex + 1,
             selectedIndex: null,
             correct: null,
+            eliminatedIndexes: [],
+            incorrectIndexes: [],
           }
         : state;
     case "TOGGLE_SOUND":
@@ -255,50 +274,38 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
+export const MAX_QUESTIONS = 15;
+
 export function validateGameConfig(config: GameConfig): string[] {
   const errors: string[] = [];
   if (!config.title.trim()) errors.push("The game title is missing.");
-  if (!config.contestant.trim()) errors.push("The contestant name is missing.");
-  if (config.questions.length !== 15) {
-    errors.push(`Expected 15 questions, found ${config.questions.length}.`);
+  if (!config.logo.trim()) errors.push("The logo path is missing.");
+  if (config.questions.length < 1 || config.questions.length > MAX_QUESTIONS) {
+    errors.push(`Expected 1 to ${MAX_QUESTIONS} questions, but found ${config.questions.length}.`);
   }
 
-  const ids = new Set<string>();
   config.questions.forEach((question, index) => {
     const label = `Question ${index + 1}`;
-    if (!question.id.trim()) errors.push(`${label} needs an id.`);
-    if (ids.has(question.id)) errors.push(`${label} has a duplicate id.`);
-    ids.add(question.id);
-    if (!question.amount.trim()) errors.push(`${label} needs a money value.`);
-    if (!question.prompt.trim()) errors.push(`${label} needs prompt text.`);
+    if (!question.amount.trim()) errors.push(`${label} is missing an amount.`);
+    if (!question.prompt.trim()) errors.push(`${label} is missing its question text.`);
     if (question.answers.length !== 4 || question.answers.some((answer) => !answer.trim())) {
-      errors.push(`${label} must have four non-empty answers.`);
+      errors.push(`${label} needs exactly four answers.`);
     }
-    if (![0, 1, 2, 3].includes(question.correctIndex)) {
-      errors.push(`${label} has an invalid correct answer index.`);
+    if (!ANSWER_LETTERS.includes(question.correct)) {
+      errors.push(`${label} needs a correct answer of "A", "B", "C", or "D".`);
     }
   });
 
-  if (config.questions.at(-1)?.amount !== "$1,000,000") {
-    errors.push("The final question must be worth $1,000,000.");
-  }
   return errors;
 }
 
 export function answerAnnouncement(state: GameState): string {
-  const question = gameConfig.questions[state.questionIndex];
-  if (state.phase === "locked" && state.selectedIndex !== null) {
-    return `${ANSWER_LETTERS[state.selectedIndex]} is locked in.`;
+  const { text } = gameConfig;
+  if (state.phase === "selected" && state.selectedIndex !== null) {
+    return text.announceSelected(ANSWER_LETTERS[state.selectedIndex]);
   }
-  if (state.phase === "revealed" && state.correct) {
-    return "Correct answer.";
-  }
-  if (state.phase === "revealed" && state.correct === false) {
-    const isFinal = state.questionIndex === gameConfig.questions.length - 1;
-    return isFinal
-      ? "Incorrect. The million-dollar question will reset for another attempt."
-      : `Incorrect. The correct answer is ${ANSWER_LETTERS[question.correctIndex]}: ${question.answers[question.correctIndex]}.`;
-  }
-  if (state.phase === "celebration") return "Simon has won one million dollars!";
+  if (state.phase === "revealed" && state.correct) return text.announceCorrect;
+  if (state.phase === "revealed" && state.correct === false) return text.announceIncorrect;
+  if (state.phase === "celebration") return text.announceWinner;
   return "";
 }

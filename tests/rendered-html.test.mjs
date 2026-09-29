@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { content } from "../app/content.ts";
+
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#x27;");
+}
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -12,16 +22,16 @@ async function render() {
   );
 }
 
-test("server renders Simon's game shell and final metadata", async () => {
+test("server renders the game shell and metadata from app/content.ts", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Simon&#x27;s Millionaire — 30th Birthday Edition<\/title>/i);
-  assert.match(html, /Simon Wants to Be a Millionaire/i);
-  assert.match(html, /30th Birthday Edition/i);
-  assert.match(html, /Start the show/i);
-  assert.match(html, /simon-millionaire-logo\.jpeg/i);
+  assert.ok(html.includes(`<html lang="${escapeHtml(content.language)}">`));
+  assert.ok(html.includes(`<title>${escapeHtml(`${content.title} — ${content.subtitle}`)}</title>`));
+  assert.match(html, /class="screen start-screen ready-screen"/i);
+  assert.ok(html.includes(escapeHtml(content.text.startShow)));
+  assert.doesNotMatch(html, /<img/i);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/i);
 });
